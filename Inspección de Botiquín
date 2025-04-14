@@ -1,0 +1,577 @@
+"use client";
+
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Table, TableBody, TableHeader, TableHead, TableCell, TableRow } from '@/components/ui/table';
+import { Toaster } from '@/components/ui/toaster';
+import React from 'react';
+import { Icons } from '@/components/icons';
+import jsPDF from 'jspdf';
+import { useToast } from '@/hooks/use-toast';
+import { Share2 } from "lucide-react";
+import html2canvas from 'html2canvas';
+
+// Define a type for local storage
+interface LocalStorageData {
+  company?: string;
+  kitType?: string;
+  project?: string;
+  inspector?: string;
+  inspectionType?: string;
+  date?: Date | null;
+  stockActual?: Record<number, number>;
+  generalObservations?: string;
+  otherProjectName?: string;
+}
+
+const Home = () => {
+  const [date, setDate] = useState<Date | null>(new Date());
+  const [stockActual, setStockActual] = useState<Record<number, number>>({});
+  const [medicines, setMedicines] = useState<Medicine[]>([
+    {
+      id: 1,
+      name: 'Yodopovidona de 120 ml',
+      usage: 'Antiséptico de heridas',
+      presentation: 'Líquido',
+      requiredStock: 1,
+    },
+    {
+      id: 2,
+      name: 'Alcohol de 120 ml',
+      usage: 'Desinfecta piel y superficies',
+      presentation: 'Líquido',
+      requiredStock: 2,
+    },
+    {
+      id: 3,
+      name: 'Agua Oxigenada de 120 ml',
+      usage: 'Limpia y desinfecta cortes',
+      presentation: 'Líquido',
+      requiredStock: 1,
+    },
+    {
+      id: 4,
+      name: 'Curitas (vendas adhesivas)',
+      usage: 'Cubre y protege heridas pequeñas',
+      presentation: 'Unidad',
+      requiredStock: 6,
+    },
+    {
+      id: 5,
+      name: 'Gasa estéril 10x10 cm',
+      usage: 'Absorbe fluidos y protege',
+      presentation: 'Paquetes',
+      requiredStock: 4,
+    },
+    {
+      id: 6,
+      name: 'Apósitos',
+      usage: 'Cobertura para curaciones',
+      presentation: 'Variados',
+      requiredStock: 5,
+    },
+    {
+      id: 7,
+      name: 'Vendas elásticas de 3"',
+      usage: 'Sujeta y comprime lesiones',
+      presentation: 'Rollos',
+      requiredStock: 2,
+    },
+    {
+      id: 8,
+      name: 'Vendas elásticas de 5" x 5 yardas',
+      usage: 'Sujeta y comprime mayor área',
+      presentation: 'Rollos',
+      requiredStock: 2,
+    },
+    {
+      id: 9,
+      name: 'Esparadrapo de 5 x 4.5 cm',
+      usage: 'Fija apósitos y gasas',
+      presentation: 'Rollo',
+      requiredStock: 1,
+    },
+    {
+      id: 10,
+      name: 'Algodón x 50 gr',
+      usage: 'Limpieza y aplicación de antisépticos',
+      presentation: 'Paquete',
+      requiredStock: 2,
+    },
+    {
+      id: 11,
+      name: 'Guantes Quirúrgicos 7 1/2',
+      usage: 'Protegen manos al tratar heridas',
+      presentation: 'Par',
+      requiredStock: 2,
+    },
+    {
+      id: 12,
+      name: 'Tijera punta roma de 3 pulgadas',
+      usage: 'Corta sin riesgo de punción',
+      presentation: 'Unidad',
+      requiredStock: 1,
+    },
+    {
+      id: 13,
+      name: 'Bajalenguas',
+      usage: 'Para inspección bucal',
+      presentation: 'Unidad',
+      requiredStock: 10,
+    },
+    {
+      id: 14,
+      name: 'Termómetro Digital',
+      usage: 'Mide la temperatura',
+      presentation: 'Unidad',
+      requiredStock: 1,
+    },
+  ]);
+  const [companies, setCompanies] = useState<string[]>(['Herzab Sac', 'Enosa']);
+  const [projects, setProjects] = useState<string[]>([
+    'Cas Lomas',
+    'Cas Somate',
+    'Subestaciones',
+    'Facturación Piura',
+    'Comercial Sechura',
+  ]);
+  const [generalObservations, setGeneralObservations] = useState<string>('');
+
+  const [company, setCompany] = useState<string | undefined>(undefined);
+  const [kitType, setKitType] = useState<string | undefined>(undefined);
+  const [project, setProject] = useState<string | undefined>(undefined);
+  const [inspector, setInspector] = useState<string>('');
+  const [inspectionType, setInspectionType] = useState<string | undefined>(undefined);
+  const [otherProjectName, setOtherProjectName] = useState<string>('');
+  const inspectionFormRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    // Load saved data from local storage on component mount
+    const storedData = localStorage.getItem('inspectionData');
+    if (storedData) {
+      const parsedData: LocalStorageData = JSON.parse(storedData);
+      setCompany(parsedData.company);
+      setKitType(parsedData.kitType);
+      setProject(parsedData.project);
+      setInspector(parsedData.inspector || '');
+      setInspectionType(parsedData.inspectionType);
+      setDate(parsedData.date ? new Date(parsedData.date) : new Date());
+      setStockActual(parsedData.stockActual || {});
+      setGeneralObservations(parsedData.generalObservations || '');
+      setOtherProjectName(parsedData.otherProjectName || '');
+    } else {
+      setDate(new Date());
+    }
+  }, []);
+
+  useEffect(() => {
+    // Save data to local storage whenever it changes
+    const dataToStore: LocalStorageData = {
+      company,
+      kitType,
+      project: project === 'otro' ? otherProjectName : project,
+      inspector,
+      inspectionType,
+      date,
+      stockActual,
+      generalObservations,
+      otherProjectName,
+    };
+    localStorage.setItem('inspectionData', JSON.stringify(dataToStore));
+  }, [
+    company,
+    kitType,
+    project,
+    inspector,
+    inspectionType,
+    date,
+    stockActual,
+    generalObservations,
+    otherProjectName,
+  ]);
+
+  const handleStockChange = useCallback((index: number, value: number) => {
+    const requiredStock = medicines[index]?.requiredStock || 0;
+    if (value <= requiredStock) {
+      setStockActual(prev => ({
+        ...prev,
+        [index]: value,
+      }));
+    } else {
+       toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Stock Actual no puede ser mayor que Stock Requerido.',
+      });
+    }
+  }, [medicines, toast]);
+
+  const projectValue = useMemo(() => {
+    return project === 'otro' ? otherProjectName : project;
+  }, [project, otherProjectName]);
+
+  const kitTypeValue = useMemo(() => {
+    return kitType;
+  }, [kitType]);
+
+  const inspectionTypeValue = useMemo(() => {
+    return inspectionType;
+  }, [inspectionType]);
+
+  const handleExportPdf = async () => {
+    try {
+      const element = inspectionFormRef.current;
+
+      if (!element) {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Could not find the inspection form element.',
+        });
+        return;
+      }
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        scrollX: 0,
+        scrollY: 0,
+        width: element.offsetWidth,
+        height: element.offsetHeight,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'pt',
+        format: 'a1'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+
+      const scaleFactor = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight) * 0.95;
+      const scaledImgWidth = imgWidth * scaleFactor;
+      const scaledImgHeight = imgHeight * scaleFactor;
+
+      const xOffset = (pdfWidth - scaledImgWidth) / 2;
+      const yOffset = (pdfHeight - scaledImgHeight) / 2;
+
+      pdf.addImage(imgData, 'PNG', xOffset, yOffset, scaledImgWidth, scaledImgHeight);
+
+      pdf.save("inspection-form.pdf");
+
+      toast({
+        title: 'Exported to PDF',
+        description: 'The form has been exported successfully.',
+      });
+
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error?.message || 'There was an error exporting the form. Please try again.',
+      });
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      const element = inspectionFormRef.current;
+
+      if (!element) {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Could not find the inspection form element.',
+        });
+        return;
+      }
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        scrollX: 0,
+        scrollY: 0,
+        width: element.offsetWidth,
+        height: element.offsetHeight,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'pt',
+        format: 'a1'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+
+      const scaleFactor = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight) * 0.95;
+      const scaledImgWidth = imgWidth * scaleFactor;
+      const scaledImgHeight = imgHeight * scaleFactor;
+
+      const xOffset = (pdfWidth - scaledImgWidth) / 2;
+      const yOffset = (pdfHeight - scaledImgHeight) / 2;
+
+      pdf.addImage(imgData, 'PNG', xOffset, yOffset, scaledImgWidth, scaledImgHeight);
+
+      const pdfBlob = pdf.output('blob');
+
+      if (navigator.share && navigator.canShare({ files: [new File([pdfBlob], "inspection-form.pdf", { type: "application/pdf" })] })) {
+        navigator.share({
+          files: [new File([pdfBlob], "inspection-form.pdf", { type: "application/pdf" })],
+          title: 'Formato de Inspección de Botiquín',
+          text: 'Compartiendo formato de inspección de botiquín en formato PDF.',
+        })
+          .then(() => console.log('Shared successfully'))
+          .catch((error) => console.log('Error sharing', error));
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Sharing is not supported on this browser.',
+        });
+      }
+    } catch (error: any) {
+      console.error('Error creating or sharing PDF:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error?.message || 'Failed to create or share the PDF. Please try again.',
+      });
+    }
+  };
+
+  const getStockStatusColor = (actual: number | undefined, required: number): string => {
+    if (actual === undefined) return 'text-muted-foreground';
+    if (actual >= required) return 'text-[hsl(var(--stock-full))]';
+    if (actual > 0) return 'text-[hsl(var(--stock-partial))]';
+    return 'text-[hsl(var(--stock-critical))]';
+  };
+
+  return (
+    <div className="flex flex-col items-center p-6 bg-[hsl(var(--background))] min-h-screen text-[hsl(var(--foreground))] font-poppins" ref={inspectionFormRef}>
+      <h2 className="text-3xl font-bold mb-6 text-center text-[hsl(var(--primary))]">Formato de Inspección de Botiquín</h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-5xl">
+         <div className="bg-card rounded-md shadow-sm p-4">
+          <Label htmlFor="empresa" className="block font-semibold text-gray-700 mb-2 text-[hsl(var(--primary))]">Empresa</Label>
+          <Select onValueChange={setCompany} value={company} className='h-10'>
+            <SelectTrigger id="empresa" className="h-10">
+              {company ? <div className="text-black px-3 py-2 rounded-md">{company}</div> : <SelectValue placeholder="Seleccione Empresa" />}
+            </SelectTrigger>
+            <SelectContent>
+              {companies.map(companyName => (
+                <SelectItem key={companyName} value={companyName}>
+                  {companyName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="bg-card rounded-md shadow-sm p-4">
+          <Label htmlFor="botiquin" className="block font-semibold text-gray-700 mb-2 text-[hsl(var(--primary))]">Botiquín De:</Label>
+            <Select onValueChange={setKitType} value={kitType} className='h-10'>
+              <SelectTrigger id="botiquin" className="h-10">
+                {kitTypeValue ? <div className="text-black px-3 py-2 rounded-md">{kitTypeValue}</div> : <SelectValue placeholder="Seleccione Botiquín" />}
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Oficina">Oficina</SelectItem>
+                <SelectItem value="Unidad Móvil">Unidad Móvil</SelectItem>
+                <SelectItem value="Subestaciones">Subestaciones</SelectItem>
+                <SelectItem value="Brigadas">Brigadas</SelectItem>
+              </SelectContent>
+            </Select>
+        </div>
+
+        <div className="bg-card rounded-md shadow-sm p-4">
+          <Label htmlFor="proyecto" className="block font-semibold text-gray-700 mb-2 text-[hsl(var(--primary))]">Proyecto</Label>
+            <Select onValueChange={setProject} value={project} className='h-10'>
+              <SelectTrigger id="proyecto" className="h-10">
+              {projectValue ? <div className="text-black px-3 py-2 rounded-md">{projectValue}</div> : <SelectValue placeholder="Seleccione Proyecto" />}
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map(projectName => (
+                  <SelectItem key={projectName} value={projectName}>
+                    {projectName}
+                  </SelectItem>
+                ))}
+                <SelectItem value="otro">Otro (Especifique)</SelectItem>
+              </SelectContent>
+            </Select>
+            {project === 'otro' && (
+              <Input
+                type="text"
+                placeholder="Ingrese el nombre del proyecto"
+                value={otherProjectName}
+                onChange={e => setOtherProjectName(e.target.value)}
+                className="h-10"
+              />
+            )}
+        </div>
+
+        <div className="bg-card rounded-md shadow-sm p-4">
+          <Label htmlFor="inspector" className="block font-semibold text-gray-700 mb-2 text-[hsl(var(--primary))]">Inspector</Label>
+           <Textarea
+              id="inspector"
+              placeholder="Ingrese el nombre del inspector"
+              value={inspector}
+              onChange={e => setInspector(e.target.value)}
+              className="rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ verticalAlign: 'top', height: '1rem' }}
+            />
+        </div>
+
+        <div className="bg-card rounded-md shadow-sm p-4">
+          <Label htmlFor="tipo_inspeccion" className="block font-semibold text-gray-700 mb-2 text-[hsl(var(--primary))]">Tipo de Inspección</Label>
+           <Select onValueChange={setInspectionType} value={inspectionType} className='h-10'>
+            <SelectTrigger id="tipo_inspeccion" className="h-10">
+              {inspectionTypeValue ? <div className="text-black px-3 py-2 rounded-md">{inspectionTypeValue}</div> : <SelectValue placeholder="Seleccione Tipo" />}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Planeada">Planeada</SelectItem>
+              <SelectItem value="Inesperada">Inesperada</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="bg-card rounded-md shadow-sm p-4">
+          <Label className="block font-semibold text-gray-700 mb-2 text-[hsl(var(--primary))]">Fecha de Inspección</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={'outline'}
+                className={cn(
+                  'w-full justify-start text-left font-normal h-10',
+                  !date && 'text-muted-foreground'
+                )}
+              >
+                <Icons.calendar className="mr-2 h-4 w-4" />
+                {date ? format(date, 'PPP') : <span>Pick a date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start" side="bottom">
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={setDate}
+                disabled={false}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
+      {/* Medicine Inventory Table */}
+      <div className="w-full max-w-7xl mt-8">
+        <Table className="bg-card rounded-md shadow-sm">
+          <TableHeader>
+            <TableRow className="bg-muted text-foreground">
+              <TableHead className="text-center font-semibold w-[35%]">Medicamento/Insumo</TableHead>
+              <TableHead className="w-[15%] text-center font-semibold">Stock Requerido</TableHead>
+              <TableHead className="w-[15%] text-center font-semibold">Stock Actual</TableHead>
+              <TableHead className="font-semibold text-center">Observaciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {medicines.map((medicine, index) => {
+              const stockStatusColor = getStockStatusColor(stockActual[index], medicine.requiredStock);
+              return (
+                <TableRow key={index}>
+                  <TableCell className="w-[35%]">{medicine.name}</TableCell>
+                  <TableCell className="w-[15%] text-center">{medicine.requiredStock}</TableCell>
+                  <TableCell className="w-[15%] text-center">
+                    <div className="flex justify-center">
+                      <Input
+                        type="number"
+                        min="0"
+                        max={medicine.requiredStock}
+                        value={stockActual[index] || ''}
+                        onChange={e =>
+                          handleStockChange(index, parseInt(e.target.value))
+                        }
+                        className="w-20 rounded text-center h-14 flex items-start justify-center"
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                     <div className="flex justify-center">
+                      <Input
+                        type="text"
+                        placeholder="Observaciones"
+                        className="rounded h-20"
+                      />
+                     </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* General Observations */}
+      <div className="w-full max-w-3xl mt-8">
+        <Label htmlFor="general-observations" className="block font-semibold text-gray-700 mb-2 text-[hsl(var(--primary))]">Observaciones Generales</Label>
+        <Textarea
+          id="general-observations"
+          placeholder="Ingrese observaciones generales sobre la inspección del botiquín"
+          className="rounded h-10"
+          value={generalObservations}
+          onChange={e => setGeneralObservations(e.target.value)}
+        />
+      </div>
+       <div className="flex justify-center space-x-4 mt-4">
+        <Button
+          className="mt-4 bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] rounded hover:bg-[hsl(var(--primary)/90)] transition-transform hover:scale-105"
+          onClick={handleExportPdf}
+        >
+          Exportar a PDF
+        </Button>
+        <Button
+          className="mt-4 bg-green-500 text-white rounded hover:bg-green-700 transition-transform hover:scale-105"
+          onClick={handleShare}
+        >
+          Compartir <Share2 className="ml-2" />
+        </Button>
+      </div>
+
+      <Toaster />
+    </div>
+  );
+};
+
+interface Medicine {
+  id: number;
+  name: string;
+  usage: string;
+  presentation: string;
+  requiredStock: number;
+}
+export default React.memo(Home);
+
